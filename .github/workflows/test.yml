@@ -1,0 +1,16 @@
+name: CI from client
+permissions:
+  contents: write
+  actions: write
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'Message'
+        required: false
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+            echo "Hello from client workflow: ${{ github.event.inputs.message }}"
