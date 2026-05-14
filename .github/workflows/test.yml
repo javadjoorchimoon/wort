@@ -11,11 +11,20 @@ on:
         description: 'Encryption password for the split archive'
         required: true
         type: string
-      # domain input is no longer needed (single file only)
-      split_size:
-        description: 'Size of each split part (e.g., 100m, 200m, 1g)'
+      filename:
+        description: 'Custom name for the downloaded file (e.g., myfile.zip)'
         required: false
-        default: '100m'
+        default: ''
+        type: string
+      split_size:
+        description: 'Size of each split part (e.g., 100m, 200m)'
+        required: false
+        default: '99m'
+        type: string
+      output_dir:
+        description: 'Directory where split parts will be stored (created if missing)'
+        required: false
+        default: 'splits'
         type: string
 
 jobs:
@@ -30,29 +39,34 @@ jobs:
 
     - name: Download single file
       run: |
-        # Download the file, keeping its original name
-        curl -JLO "${{ inputs.url }}"
-        # Alternatively, use wget: wget --content-disposition "${{ inputs.url }}"
+        if [ -z "${{ inputs.filename }}" ]; then
+          curl -JLO "${{ inputs.url }}"
+          DOWNLOADED_FILE=$(ls -t | head -n1)
+        else
+          DOWNLOADED_FILE="${{ inputs.filename }}"
+          curl -L -o "$DOWNLOADED_FILE" "${{ inputs.url }}"
+        fi
+        echo "DOWNLOADED_FILE=$DOWNLOADED_FILE" >> $GITHUB_ENV
 
     - name: Create split encrypted archive
       env:
         ARCHIVE_PASSWORD: ${{ inputs.password }}
         SPLIT_SIZE: ${{ inputs.split_size }}
       run: |
-        # Find the downloaded file (the most recent file in the current directory)
-        DOWNLOADED_FILE=$(ls -t | head -n1)
         echo "Splitting and encrypting: $DOWNLOADED_FILE"
-        # Create a password-protected, multi-volume 7z archive
         7z a -t7z -v"$SPLIT_SIZE" -p"$ARCHIVE_PASSWORD" -mhe=on archive.7z "$DOWNLOADED_FILE"
-        # Remove the original file to avoid committing it
         rm "$DOWNLOADED_FILE"
 
-    - name: Commit and Push split files
+    - name: Move split archives to target directory
+      run: |
+        TARGET_DIR="${{ inputs.output_dir }}"
+        mkdir -p "$TARGET_DIR"
+        mv archive.7z.* "$TARGET_DIR/"
+
+    - name: Commit and Push split files inside the directory
       run: |
         git config --global user.name "${{ github.actor }}"
         git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-
-        # Add all parts of the split archive
-        git add archive.7z.*
-        git commit -m "Add split encrypted archive of downloaded file"
+        git add "${{ inputs.output_dir }}"
+        git commit -m "Add split encrypted archive in ${{ inputs.output_dir }}" || echo "No changes to commit"
         git push
