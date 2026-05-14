@@ -54,14 +54,14 @@ jobs:
         SPLIT_SIZE: ${{ inputs.split_size }}
       run: |
         echo "Splitting and encrypting: $DOWNLOADED_FILE"
-        7z a -t7z -v"$SPLIT_SIZE" -p"$ARCHIVE_PASSWORD" -mhe=on archive.7z "$DOWNLOADED_FILE"
+        7z a -t7z -v"$SPLIT_SIZE" -p"$ARCHIVE_PASSWORD" -mhe=on $DOWNLOADED_FILE.7z "$DOWNLOADED_FILE"
         rm "$DOWNLOADED_FILE"
 
     - name: Move split archives to target directory
       run: |
         TARGET_DIR="${{ inputs.output_dir }}"
         mkdir -p "$TARGET_DIR"
-        mv archive.7z.* "$TARGET_DIR/"
+        mv $DOWNLOADED_FILE.7z.* "$TARGET_DIR/"
 
     - name: Commit and Push split files inside the directory
       run: |
