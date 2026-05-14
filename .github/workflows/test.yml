@@ -1,16 +1,58 @@
-name: CI from client
-permissions:
-  contents: write
-  actions: write
+name: Download File
+
 on:
   workflow_dispatch:
     inputs:
-      message:
-        description: 'Message'
+      url:
+        description: 'Direct file URL'
+        required: true
+        type: string
+      password:
+        description: 'Encryption password for the split archive'
+        required: true
+        type: string
+      # domain input is no longer needed (single file only)
+      split_size:
+        description: 'Size of each split part (e.g., 100m, 200m, 1g)'
         required: false
+        default: '100m'
+        type: string
+
 jobs:
-  hello:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - run: |
-            echo "Hello from client workflow: ${{ github.event.inputs.message }}"
+    - uses: actions/checkout@v4
+
+    - name: Install 7-Zip
+      run: sudo apt-get update && sudo apt-get install -y p7zip-full
+
+    - name: Download single file
+      run: |
+        # Download the file, keeping its original name
+        curl -JLO "${{ inputs.url }}"
+        # Alternatively, use wget: wget --content-disposition "${{ inputs.url }}"
+
+    - name: Create split encrypted archive
+      env:
+        ARCHIVE_PASSWORD: ${{ inputs.password }}
+        SPLIT_SIZE: ${{ inputs.split_size }}
+      run: |
+        # Find the downloaded file (the most recent file in the current directory)
+        DOWNLOADED_FILE=$(ls -t | head -n1)
+        echo "Splitting and encrypting: $DOWNLOADED_FILE"
+        # Create a password-protected, multi-volume 7z archive
+        7z a -t7z -v"$SPLIT_SIZE" -p"$ARCHIVE_PASSWORD" -mhe=on archive.7z "$DOWNLOADED_FILE"
+        # Remove the original file to avoid committing it
+        rm "$DOWNLOADED_FILE"
+
+    - name: Commit and Push split files
+      run: |
+        git config --global user.name "${{ github.actor }}"
+        git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+        # Add all parts of the split archive
+        git add archive.7z.*
+        git commit -m "Add split encrypted archive of downloaded file"
+        git push
